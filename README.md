@@ -26,11 +26,11 @@ The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Ev
 
 
 ```
-                                  ┌─ Official Repos ──> pacman
-                                  ├─ Chaotic-AUR ─────> pacman
+                                  ┌─ Official Repos ──> yay
+                                  ├─ Chaotic-AUR ─────> yay
 User Input (puyo) ───────────────>├─ AUR ─────────────> yay / makepkg
-                                  ├─ Local .deb ──────> debtap + pacman -U
-                                  └─ GitHub Repo ─────> .puyo / PKGBUILD generator
+                                  ├─ Local .deb/.rpm ──────> extraction engine + pacman -U
+                                  └─ GitHub Repo ─────> read .puyo as build instructions
 ```
 
 ---
