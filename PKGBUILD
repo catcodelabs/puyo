@@ -1,3 +1,4 @@
+# Maintainer: CatCodeLabs <voxythecat@gmail.com>
 pkgname=puyo
 pkgver=0.1.0
 pkgrel=1
@@ -7,11 +8,15 @@ url="https://github.com/catcodelabs/puyo"
 license=('GPL-3.0-or-later')
 depends=('pacman' 'git' 'libarchive' 'yay')
 makedepends=('cargo')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
 
 build() {
-    cargo build --release --locked --target-dir target
+    cd "$pkgname-$pkgver"
+    cargo build --release --locked
 }
 
 package() {
-    install -Dm755 "target/release/puyo" "$pkgdir/usr/bin/puyo"
+    cd "$pkgname-$pkgver"
+    install -Dm755 "target/release/$pkgname" "$pkgdir/usr/bin/$pkgname"
 }
