@@ -3,7 +3,7 @@
 > **P**recariously **U**nified **Y**ay **O**rchestrator  
 > *A universal meta-wrapper for Arch-based Linux Distros.*
 
-`puyo` is a single wrapper designed to solve the fragmentation friction on Arch Linux. While traditional helpers like `yay` or `paru` handle official repositories and the AUR, `puyo` bridges the gap by routing official repos, custom binary mirrors (like `chaotic-aur`), the AUR, local `.deb` files, and direct GitHub repositories through a single unified pipeline.
+`puyo` is a single wrapper designed to solve the fragmentation friction on Arch Linux. While traditional helpers like `yay` or `paru` handle official repositories and the AUR, `puyo` bridges the gap by routing official repos, custom binary mirrors (like `chaotic-aur`), the AUR, local `.deb` and `.rpm` files, and direct GitHub repositories through a single unified pipeline.
 
 The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Everything `puyo` touches is packaged into a standard `.pkg.tar.zst` before installation, guaranteeing that every file on your system is cleanly tracked, upgradable, and easily removable.
 
