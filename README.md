@@ -39,22 +39,28 @@ User Input (puyo) ───────────────>├─ AUR ─�
 
 ### Prerequisites
 
-Ensure you have basic development tools, `git`, and `yay` installed:
+Ensure basic build tools, Rust, Git, and `libarchive` are installed:
 
 ```bash
-sudo pacman -S --needed base-devel git
+sudo pacman -S --needed base-devel rust git libarchive
+
 ```
 
-*Optional dependencies:*
+If you don't have `yay` installed yet, set it up via the AUR:
 
-* `debtap`: Required for local `.deb` file conversions (`sudo pacman -S debtap`).
+```bash
+git clone [https://aur.archlinux.org/yay.git](https://aur.archlinux.org/yay.git) /tmp/yay
+cd /tmp/yay
+makepkg -si
+
+```
 
 ### Quick Install
 
 Clone the repository and install using `makepkg`:
 
 ```bash
-git clone https://github.com/catcodelab/puyo
+git clone https://github.com/catcodelabs/puyo
 cd puyo
 makepkg -si
 ```
