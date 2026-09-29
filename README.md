@@ -16,7 +16,7 @@ The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Ev
 * **Dual Syntax Support:** Use native `pacman` flags (`puyo -Syu`) or human-friendly verbs (`puyo install`, `puyo upgrade`).
 * **Safe Non-Root Builds:** Enforces privilege separation—compilation runs strictly as an unprivileged user, elevating to `sudo` only when handing off `.pkg.tar.zst` archives to `pacman`.
 * **Declarative GitHub Builds (`.puyo`):** Automatically builds GitHub repos using `.puyo` manifest files.
-* **Automated `.deb` Conversion:** Converts Debian binaries via `debtap` and registers them directly into the local `pacman` database.
+* **Automated `.deb` and `.rpm` Conversion:** Extracts the package data from Debian and Fedora packagw files and registers them directly into the local `pacman` database by generating a PKGBUILD on the fly.
 
 ---
 
