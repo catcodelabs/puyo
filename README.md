@@ -1,7 +1,7 @@
 # puyo
 
 > **P**recariously **U**nified **Y**ay **O**rchestrator  
-> *A universal meta-wrapper for Arch Linux held together by hope and duct tape.*
+> *A universal meta-wrapper for Arch-based Linux Distros.*
 
 `puyo` is a single wrapper designed to solve the fragmentation friction on Arch Linux. While traditional helpers like `yay` or `paru` handle official repositories and the AUR, `puyo` bridges the gap by routing official repos, custom binary mirrors (like `chaotic-aur`), the AUR, local `.deb` files, and direct GitHub repositories through a single unified pipeline.
 
@@ -49,7 +49,7 @@ sudo pacman -S --needed base-devel rust git libarchive
 If you don't have `yay` installed yet, set it up via the AUR:
 
 ```bash
-git clone [https://aur.archlinux.org/yay.git](https://aur.archlinux.org/yay.git) /tmp/yay
+git clone https://aur.archlinux.org/yay.git /tmp/yay
 cd /tmp/yay
 makepkg -si
 
