@@ -20,18 +20,63 @@ The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Ev
 
 ---
 
-## How It Works
+## How It Works & Bucket-Based Execution
 
-
-
+When you pass a list of targets and flags to `puyo`, it parses your input into an internal **Transaction Pipeline**. Targets are automatically categorized into isolated operational "buckets" based on their source type, operational verb, or active engine modifier.
 
 ```
-                                  ┌─ Official Repos ──> yay
-                                  ├─ Chaotic-AUR ─────> yay
-User Input (puyo) ───────────────>├─ AUR ─────────────> yay / makepkg
-                                  ├─ Local .deb/.rpm ─> extraction engine + pacman -U
-                                  └─ GitHub Repo ─────> read .puyo as build instructions
+                                  ┌─ Native/AUR Bucket ──> yay -S
+                                  ├─ Local .deb Bucket ───> bsdtar engine + pacman -U
+User Input (puyo) ───────────────>├─ Local .rpm Bucket ───> bsdtar engine + pacman -U
+                                  ├─ GitHub Bucket ───────> clone + .puyo manifest build
+                                  ├─ Flatpak Bucket ──────> flatpak install
+                                  └─ Snap Bucket ─────────> snap install
+
 ```
+
+Instead of executing targets sequentially as they appear on the command line, `puyo` orders execution across these distinct buckets:
+
+1. **System Upgrades**: Runs native updates (`yay -Syu`), Flatpak upgrades, and Snap refreshes.
+2. **Removals**: Executes native `pacman -Rns`, Flatpak uninstalls, and Snap removals.
+3. **GitHub Builds**: Clones repositories containing `.puyo` manifests and builds native packages.
+4. **Native & Archive Installs**: Batches standard pacman/AUR packages together and converts `.deb`/`.rpm` archives into native `.pkg.tar.zst` packages via `bsdtar` before calling `pacman -U`.
+5. **Flatpak & Snap Installs**: Batches remaining containerized app installations.
+6. **Cleanup Sweep**: Prunes orphans and backend caches if `clean` / `-C` is passed.
+
+If `--who-cares` (`-f`) is active, any bucket that fails will defer its error, allowing remaining buckets to complete before retrying failed individual targets in a granular second phase.
+
+---
+
+### Comprehensive Testing Command
+
+To verify every bucket in a single multi-engine transaction (including backend switching, archive conversion, GitHub manifest builds, atomic swaps, and system cleanup), run:
+
+```bash
+puyo swap old-pkg new-pkg \
+     native htop \
+     ./sample.deb ./sample.rpm \
+     https://github.com/catcodelabs/puyo \
+     flat install org.gimp.GIMP \
+     snap install code \
+     clean --who-cares \
+     --dry-run
+
+```
+or if you're feeling crazy:
+```bash
+puyo swap old-pkg new-pkg native htop ./sample.deb ./sample.rpm https://github.com/catcodelabs/puyo flat install org.gimp.GIMP snap install code clean --who-cares --dry-run
+
+```
+
+This single command demonstrates `puyo`'s bucket sorting in action:
+
+* **Removes** `old-pkg` and **installs** `new-pkg` as an atomic swap.
+* Routes `htop` to the **Native/AUR bucket**.
+* Passes `./sample.deb` and `./sample.rpm` through the **Archive Conversion bucket**.
+* Clones and builds the **GitHub bucket** using the `.puyo` manifest.
+* Switches engines to install GIMP via the **Flatpak bucket** and Code via the **Snap bucket**.
+* Runs system orphan/cache cleanup at the end while deferring individual failures via `--who-cares`.
+* `--dry-run` ensures nothing actually happens, so you can find out what we're doing internally without actually modifying your system
 
 ---
 
@@ -69,64 +114,112 @@ makepkg -si
 
 ## Usage
 
-`puyo` supports both traditional `pacman` flags and modern human-readable commands interchangeably.
+`puyo` supports traditional `pacman` flags, direct flag passthrough, and modern human-readable commands interchangeably.
 
 ### 1. Basic Package Management
 
-
 Standard installation (Official repos & AUR):
+
 ```bash
 puyo -S package
 # or
 puyo install package
+
 ```
 
+Full system update across all engines (native repos, AUR, Flatpak, Snap):
 
-Full system update (Syncs repos, AUR, and tracked sources):
 ```bash
 puyo -Syu
 # or
 puyo upgrade
+
 ```
 
-
 Clean package removal:
+
 ```bash
 puyo -R package
 # or
 puyo remove package
+
 ```
 
+Package search across all active backends:
 
-Package search
 ```bash
-puyo -s package
+puyo -s query
 # or
-puyo search package
+puyo search query
+
 ```
 
-### 2. Installing Local `.deb` Files
+Direct passthrough (queries, status checks, local binary files):
 
-Pass a path to any local `.deb` package. `puyo` will invoke our `bsdtar`-based extraction engine, translate dependencies, generate a `.pkg.tar.zst` archive, and install it via `pacman`:
+```bash
+puyo -Qs package
+puyo -Si package
+
+```
+
+### 2. Multi-Backend Operations (Flatpak & Snap)
+
+Route commands to specific engines on the fly:
+
+```bash
+# Engine switches
+puyo flat install flathub org.gimp.GIMP
+puyo snap install code
+
+# One-shot commands
+puyo flatinstall org.gimp.GIMP
+puyo snapremove code
+
+```
+
+### 3. Atomic Swaps, Cleanup & Granular Mode
+
+Replace package A with package B in a single transaction:
+
+```bash
+puyo swap old-package new-package
+
+```
+
+Sweep native orphans and prune backend package caches:
+
+```bash
+puyo clean
+# or
+puyo -C
+
+```
+
+Run transactions with error-deferral mode enabled:
+
+```bash
+puyo install pkg1 pkg2 pkg3 --who-cares
+
+```
+
+### 4. Installing Local `.deb` and `.rpm` Files
+
+Pass a path to any local `.deb` or `.rpm` package. `puyo` will invoke its `bsdtar`-based extraction engine, translate metadata, generate a native package, and install it via `pacman`:
 
 ```bash
 puyo -S ./package.deb
-# or
-puyo deb ./package.deb
-```
-The same principle applies for `.rpm` files, just replace `deb` with `rpm` in the above commands.
+puyo -S ./package.rpm
 
-### 3. Installing Directly from GitHub
+```
+
+### 5. Installing Directly from GitHub
 
 `puyo` can clone, build, and package software directly from a GitHub repository, provided a `.puyo` file sits at the repository's root:
 
 ```bash
-puyo -S https://github.com/user/project
-# or
-puyo git user/project
-```
+puyo https://github.com/user/project
 
-> Note: Not all available arguments are supported yet. For example, -Q-centric arguments aren't implemented yet. I'm working on that. However, all commands listed here have been implemented and tested with the `dash` package. Uninstallation via `yay` or `pacman` has also been confirmed as working.
+```
 
 ---
 
