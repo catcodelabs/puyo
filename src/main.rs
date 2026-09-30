@@ -4,175 +4,205 @@ mod manifest;
 mod rpm;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-use colored::*;
-use executor::{
-    enforce_non_root, handle_deb_install, handle_rpm_install, run_command,
-};
-use manifest::PuyoManifest;
-use std::path::Path;
+use executor::{enforce_non_root, execute_pipeline, TransactionPipeline};
+use std::env;
 
-#[derive(Parser)]
-#[command(
-    name = "puyo",
-    author = "CatCodeLabs",
-    version = "0.1.0",
-    about = "puyo - Universal Meta-Wrapper for Arch Linux"
-)]
-struct Cli {
-    #[arg(short = 'S', long)]
-    sync: bool,
-
-    #[arg(short = 'y', long)]
-    refresh: bool,
-
-    #[arg(short = 'u', long)]
-    sysupgrade: bool,
-
-    #[arg(short = 'R', long)]
-    remove: bool,
-
-    #[arg(short = 's', long)]
-    search: bool,
-
-    targets: Vec<String>,
-
-    #[command(subcommand)]
-    command: Option<Commands>,
+#[derive(PartialEq)]
+enum EngineTarget {
+    Native,
+    Flatpak,
+    Snap,
 }
 
-#[derive(Subcommand)]
-enum Commands {
-    Install { targets: Vec<String> },
-    Upgrade,
-    Remove { targets: Vec<String> },
-    Search { query: String },
-    Deb { path: String },
-    Rpm { path: String },
+enum OperationMode {
+    Install,
+    Remove,
+    Search,
 }
+
 fn main() -> Result<()> {
     enforce_non_root()?;
-    let cli = Cli::parse();
 
-    if let Some(cmd) = cli.command {
-        match cmd {
-            Commands::Install { targets } => return handle_install(targets),
-            Commands::Upgrade => return run_command("yay", &["-Syu"]),
-            Commands::Remove { targets } => {
-                let mut args = vec!["pacman", "-Rns"];
-                let refs: Vec<&str> = targets.iter().map(|s| s.as_str()).collect();
-                args.extend(refs);
-                return run_command("sudo", &args);
+    let raw_args: Vec<String> = env::args().skip(1).collect();
+    let mut pipeline = TransactionPipeline::default();
+
+    if raw_args.is_empty() {
+        pipeline.update_native = true;
+        pipeline.update_flatpak = true;
+        pipeline.update_snap = true;
+        return execute_pipeline(pipeline);
+    }
+
+    let mut current_engine = EngineTarget::Native;
+    let mut current_mode = OperationMode::Install;
+    let mut iter = raw_args.into_iter().peekable();
+
+    while let Some(arg) = iter.next() {
+        match arg.as_str() {
+            // Global flags
+            "--who-cares" | "-f" => {
+                pipeline.who_cares = true;
             }
-            Commands::Search { query } => return run_command("yay", &["-Ss", &query]),
-            Commands::Deb { path } => return handle_deb_install(&path),
-            Commands::Rpm { path } => return handle_rpm_install(&path),
+            "--dry-run" => {
+                pipeline.dry_run = true;
+            }
+            "clean" | "-C" => {
+                pipeline.clean = true;
+            }
+            "--version" | "-V" => {
+                println!("puyo {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            // Full System Update
+            "update" | "upgrade" | "-Syu" | "-yu" | "-u" => {
+                pipeline.update_native = true;
+                pipeline.update_flatpak = true;
+                pipeline.update_snap = true;
+            }
+
+            // Backend-Specific Updates
+            "nativeupdate" | "pacman-update" => {
+                pipeline.update_native = true;
+            }
+            "flatupdate" | "flatpak-update" | "flatupgrade" => {
+                pipeline.update_flatpak = true;
+            }
+            "snapupdate" | "snap-update" | "snaprefresh" => {
+                pipeline.update_snap = true;
+            }
+
+            // Engine Switches (Contextual modifiers — default mode resets to Install)
+            "flat" | "flatpak" => {
+                current_engine = EngineTarget::Flatpak;
+                current_mode = OperationMode::Install;
+            }
+            "snap" => {
+                current_engine = EngineTarget::Snap;
+                current_mode = OperationMode::Install;
+            }
+            "native" | "arch" | "aur" => {
+                current_engine = EngineTarget::Native;
+                current_mode = OperationMode::Install;
+            }
+
+            // Universal Operational Mode verbs/flags
+            "install" | "-S" => {
+                current_mode = OperationMode::Install;
+            }
+            "remove" | "-R" | "-Rs" | "-Rn" | "-Rns" => {
+                current_mode = OperationMode::Remove;
+            }
+            "search" | "-s" | "-Ss" => {
+                current_mode = OperationMode::Search;
+            }
+
+            // One-Shot Engine Prefix Verbs
+            "flatinstall" | "flatpak-install" => {
+                current_engine = EngineTarget::Flatpak;
+                current_mode = OperationMode::Install;
+            }
+            "flatremove" | "flatpak-remove" | "flatuninstall" => {
+                current_engine = EngineTarget::Flatpak;
+                current_mode = OperationMode::Remove;
+            }
+            "snapinstall" | "snap-install" => {
+                current_engine = EngineTarget::Snap;
+                current_mode = OperationMode::Install;
+            }
+            "snapremove" | "snap-remove" | "snapuninstall" => {
+                current_engine = EngineTarget::Snap;
+                current_mode = OperationMode::Remove;
+            }
+
+            // Explicit 1-to-1 Swap Command
+            "swap" => {
+                let target_remove = iter.next();
+                let target_install = iter.next();
+
+                if let (Some(rem), Some(inst)) = (target_remove, target_install) {
+                    pipeline.swaps.push((rem.clone(), inst.clone()));
+                    pipeline.native_remove.push(rem);
+                    pipeline.native_install.push(inst);
+                } else {
+                    eprintln!("Error: 'swap' requires exactly two arguments: <old_pkg> <new_pkg>");
+                    std::process::exit(1);
+                }
+                current_engine = EngineTarget::Native;
+                current_mode = OperationMode::Install;
+            }
+
+            // Help
+            "--help" | "-h" => {
+                print_help();
+                return Ok(());
+            }
+
+            // Target Package Names, URLs, Paths, or Native Passthrough Flags
+            target => {
+                if target.starts_with('-') {
+                    // Forward unknown flags directly to native yay/pacman (e.g. -Qs, -Si, -U, -Qdt)
+                    pipeline.passthrough_args.push(target.to_string());
+                } else {
+                    match current_mode {
+                        OperationMode::Install => match current_engine {
+                            EngineTarget::Native => {
+                                if is_github_target(target) {
+                                    pipeline.github_install.push(target.to_string());
+                                } else {
+                                    pipeline.native_install.push(target.to_string());
+                                }
+                            }
+                            EngineTarget::Flatpak => pipeline.flatpak_install.push(target.to_string()),
+                            EngineTarget::Snap => pipeline.snap_install.push(target.to_string()),
+                        },
+                        OperationMode::Remove => match current_engine {
+                            EngineTarget::Native => pipeline.native_remove.push(target.to_string()),
+                            EngineTarget::Flatpak => pipeline.flatpak_remove.push(target.to_string()),
+                            EngineTarget::Snap => pipeline.snap_remove.push(target.to_string()),
+                        },
+                        OperationMode::Search => {
+                            pipeline.search_queries.push(target.to_string());
+                        }
+                    }
+                }
+            }
         }
     }
 
-    if cli.sync {
-        if cli.refresh && cli.sysupgrade {
-            return run_command("yay", &["-Syu"]);
-        } else if !cli.targets.is_empty() {
-            return handle_install(cli.targets);
-        }
-    } else if cli.remove && !cli.targets.is_empty() {
-        let mut args = vec!["pacman", "-Rns"];
-        let refs: Vec<&str> = cli.targets.iter().map(|s| s.as_str()).collect();
-        args.extend(refs);
-        return run_command("sudo", &args);
-    } else if cli.search && !cli.targets.is_empty() {
-        return run_command("yay", &["-Ss", &cli.targets[0]]);
-    }
-
-    println!(
-        "{}",
-        "puyo: No valid command or flags provided. Use --help for usage.".yellow()
-    );
-    Ok(())
+    execute_pipeline(pipeline)
 }
 
-fn handle_install(targets: Vec<String>) -> Result<()> {
-    for target in targets {
-        if target.ends_with(".deb") {
-            println!("{} Local .deb file: {}", "==>".green().bold(), target);
-            handle_deb_install(&target)?;
-        } else if target.ends_with(".rpm") {
-            println!("{} Local .rpm file: {}", "==>".green().bold(), target);
-            handle_rpm_install(&target)?;
-        } else if target.starts_with("https://github.com/") || target.contains('/') {
-            println!(
-                "{} GitHub repository target: {}",
-                "==>".green().bold(),
-                target
-            );
-            handle_github_install(&target)?;
-        } else {
-            println!(
-                "{} Routing target to yay/pacman: {}",
-                "==>".green().bold(),
-                target
-            );
-            run_command("yay", &["-S", &target])?;
-        }
-    }
-    Ok(())
+fn is_github_target(target: &str) -> bool {
+    target.starts_with("https://github.com/")
+        || (target.contains('/') && !target.ends_with(".deb") && !target.ends_with(".rpm"))
 }
 
-fn handle_github_install(target: &str) -> Result<()> {
-    let build_dir = std::env::temp_dir().join("puyo_build");
-    if build_dir.exists() {
-        std::fs::remove_dir_all(&build_dir)?;
-    }
-
-    // Determine target URL/Path correctly
-    let repo_url = if target.starts_with("http://") || target.starts_with("https://") {
-        target.to_string()
-    } else if Path::new(target).exists() || target.starts_with('/') || target.starts_with("./") {
-        // Local path
-        target.to_string()
-    } else {
-        // GitHub owner/repo shorthand (e.g., "catcodelab/puyo")
-        format!("https://github.com/{}.git", target)
-    };
-
+fn print_help() {
     println!(
-        "{} {} {}",
-        "==>".blue().bold(),
-        "Executing:".bold(),
-        format!("git clone --depth 1 {} {:?}", repo_url, build_dir).dimmed()
+        r#"puyo - Universal Meta-Wrapper & Transaction Manager for Arch Linux
+
+USAGE:
+    puyo [MODIFIERS] [VERBS] [PACKAGES...]
+
+COMMANDS & VERBS:
+    puyo, -Syu                  Full system update across all engines (yay, flatpak, snap)
+    install, -S                 Mark target packages for installation
+    remove, -R                  Mark target packages for removal
+    swap <pkgA> <pkgB>          Atomic 1-to-1 replacement (removes pkgA, installs pkgB)
+    clean, -C                   Sweep orphaned packages and prune backend caches
+    search, -s                  Search package databases across enabled backends
+
+ENGINE SWITCHES & ONE-SHOTS:
+    native, arch                Route subsequent targets to Yay
+    flat, flatpak               Route subsequent targets to Flatpak engine
+    snap                        Route subsequent targets to Snap engine
+    flatinstall / flatremove    One-shot Flatpak operation
+    snapinstall / snapremove    One-shot Snap operation
+
+FLAGS:
+    -f, --who-cares             Defer failures and execute isolated retries on broken targets
+    --dry-run                   Print transaction plan and exit without modifying system
+    -h, --help                  Print help information
+"#
     );
-
-    let status = std::process::Command::new("git")
-        .args(["clone", "--depth", "1", &repo_url, build_dir.to_str().unwrap()])
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_ASKPASS", "echo")
-        .status()?;
-
-    if !status.success() {
-        anyhow::bail!("Failed to clone repository: {}", repo_url);
-    }
-
-    if Path::new(&build_dir).join(".puyo").exists() {
-        println!(
-            "{} Found .puyo manifest! Synthesizing PKGBUILD...",
-            "==>".green().bold()
-        );
-        let manifest = PuyoManifest::load_from_dir(&build_dir)?;
-        let pkgbuild_content = manifest.generate_pkgbuild();
-
-        std::fs::write(build_dir.join("PKGBUILD"), pkgbuild_content)?;
-
-        let orig_dir = std::env::current_dir()?;
-        std::env::set_current_dir(&build_dir)?;
-        run_command("makepkg", &["-si"])?;
-        std::env::set_current_dir(orig_dir)?;
-    } else {
-        println!(
-            "{}",
-            "Warning: No .puyo manifest found in repository root.".yellow()
-        );
-    }
-
-    Ok(())
 }
