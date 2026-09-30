@@ -29,7 +29,7 @@ The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Ev
                                   ┌─ Official Repos ──> yay
                                   ├─ Chaotic-AUR ─────> yay
 User Input (puyo) ───────────────>├─ AUR ─────────────> yay / makepkg
-                                  ├─ Local .deb/.rpm ──────> extraction engine + pacman -U
+                                  ├─ Local .deb/.rpm ─> extraction engine + pacman -U
                                   └─ GitHub Repo ─────> read .puyo as build instructions
 ```
 
@@ -107,13 +107,14 @@ puyo search package
 
 ### 2. Installing Local `.deb` Files
 
-Pass a path to any local `.deb` package. `puyo` will invoke `debtap`, translate dependencies, generate a `.pkg.tar.zst` archive, and install it via `pacman`:
+Pass a path to any local `.deb` package. `puyo` will invoke our `bsdtar`-based extraction engine, translate dependencies, generate a `.pkg.tar.zst` archive, and install it via `pacman`:
 
 ```bash
 puyo -S ./package.deb
 # or
-puyo deb install ./package.deb
+puyo deb ./package.deb
 ```
+The same principle applies for `.rpm` files, just replace `deb` with `rpm` in the above commands.
 
 ### 3. Installing Directly from GitHub
 
@@ -122,8 +123,10 @@ puyo deb install ./package.deb
 ```bash
 puyo -S https://github.com/user/project
 # or
-puyo git install user/project
+puyo git user/project
 ```
+
+> Note: Not all available arguments are supported yet. For example, -Q-centric arguments aren't implemented yet. I'm working on that. However, all commands listed here have been implemented and tested with the `dash` package. Uninstallation via `yay` or `pacman` has also been confirmed as working.
 
 ---
 
@@ -159,4 +162,4 @@ When `puyo` detects this file during a GitHub build, it synthesizes a clean, sta
 ---
 
 ## License
-puyo is part of CatCodeLabs, and is licensed under the GNU General Public License v3.0. See `LICENSE` for more information.
+puyo is part of CatCodeLabs, and is therefore licensed under the GNU General Public License v3.0. See `LICENSE` for more information.
