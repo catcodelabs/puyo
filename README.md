@@ -100,7 +100,7 @@ puyo remove package
 
 Package search
 ```bash
-puyo -Ss package
+puyo -s package
 # or
 puyo search package
 ```
