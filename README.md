@@ -14,7 +14,7 @@ The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Ev
 * **Universal Source Ingestion:** Install software from official repos, the AUR, local Debian packages (`.deb`), or raw GitHub repos with one command.
 * **Complete System Tracking:** No more untracked binaries in `/usr/bin` from `sudo make install`. Every source is packaged into a native Arch package.
 * **Dual Syntax Support:** Use native `pacman` flags (`puyo -Syu`) or human-friendly verbs (`puyo install`, `puyo upgrade`).
-* **Safe Non-Root Builds:** Enforces privilege separation—compilation runs strictly as an unprivileged user, elevating to `sudo` only when handing off `.pkg.tar.zst` archives to `pacman`.
+* **Safe Non-Root Builds:** Enforces privilege separation - compilation runs strictly as an unprivileged user, elevating to `sudo` only when handing off `.pkg.tar.zst` archives to `pacman`.
 * **Declarative GitHub Builds (`.puyo`):** Automatically builds GitHub repos using `.puyo` manifest files.
 * **Automated `.deb` and `.rpm` Conversion:** Extracts the package data from Debian and Fedora package files and registers them directly into the local `pacman` database by generating a PKGBUILD on the fly.
 
@@ -99,6 +99,8 @@ cd /tmp/yay
 makepkg -si
 
 ```
+
+`snap` and `flatpak` are optional yet highly recommended dependencies. Installation instructions can be found on their respective websites.
 
 ### Quick Install
 
@@ -209,6 +211,9 @@ Pass a path to any local `.deb` or `.rpm` package. `puyo` will invoke its `bsdta
 ```bash
 puyo -S ./package.deb
 puyo -S ./package.rpm
+# or
+puyo install ./package.deb
+puyo install ./package.rpm
 
 ```
 
@@ -255,4 +260,4 @@ When `puyo` detects this file during a GitHub build, it synthesizes a clean, sta
 ---
 
 ## License
-puyo is part of CatCodeLabs, and is therefore licensed under the GNU General Public License v3.0. See `LICENSE` for more information.
+`puyo` is part of [CatCodeLabs](https://github.com/catcodelabs), and is therefore licensed under the GNU General Public License v3.0. See `LICENSE` for more information.
