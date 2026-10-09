@@ -11,10 +11,10 @@ The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Ev
 
 ## Key Features
 
-* **Universal Source Ingestion:** Install software from official repos, the AUR, local Debian packages (`.deb`), or raw GitHub repos with one command.
+* **Universal Source Ingestion:** Install software from official repos, the AUR, local Debian packages (`.deb`), local RPM packages (`.rpm`) or raw GitHub repos with one command.
 * **Complete System Tracking:** No more untracked binaries in `/usr/bin` from `sudo make install`. Every source is packaged into a native Arch package.
-* **Dual Syntax Support:** Use native `pacman` flags (`puyo -Syu`) or human-friendly verbs (`puyo install`, `puyo upgrade`).
-* **Safe Non-Root Builds:** Enforces privilege separation - compilation runs strictly as an unprivileged user, elevating to `sudo` only when handing off `.pkg.tar.zst` archives to `pacman`.
+* **Dual Syntax Support:** Use native `pacman` flags (`puyo -S`) or human-friendly verbs (`puyo install`).
+* **Safe Non-Root Builds:** Compilation runs strictly as an unprivileged user, elevating to `sudo` only when handing off `.pkg.tar.zst` archives to `pacman`.
 * **Declarative GitHub Builds (`.puyo`):** Automatically builds GitHub repos using `.puyo` manifest files.
 * **Automated `.deb` and `.rpm` Conversion:** Extracts the package data from Debian and Fedora package files and registers them directly into the local `pacman` database by generating a PKGBUILD on the fly.
 
@@ -40,8 +40,9 @@ Instead of executing targets sequentially as they appear on the command line, `p
 2. **Removals**: Executes native `pacman -Rns`, Flatpak uninstalls, and Snap removals.
 3. **GitHub Builds**: Clones repositories containing `.puyo` manifests and builds native packages.
 4. **Native & Archive Installs**: Batches standard pacman/AUR packages together and converts `.deb`/`.rpm` archives into native `.pkg.tar.zst` packages via `bsdtar` before calling `pacman -U`.
-5. **Flatpak & Snap Installs**: Batches remaining containerized app installations.
-6. **Cleanup Sweep**: Prunes orphans and backend caches if `clean` / `-C` is passed.
+5. **Atomic Swap**: Attempts to swap one package with another, by first uninstalling the previous one and then installing the new package. Currently breaks as soon as dependencies get involved.
+6. **Flatpak & Snap Installs**: Batches remaining containerized app installations.
+7. **Cleanup Sweep**: Prunes orphans and backend caches if `clean` / `-C` is passed.
 
 If `--who-cares` (`-f`) is active, any bucket that fails will defer its error, allowing remaining buckets to complete before retrying failed individual targets in a granular second phase.
 
@@ -76,7 +77,7 @@ This single command demonstrates `puyo`'s bucket sorting in action:
 * Clones and builds the **GitHub bucket** using the `.puyo` manifest.
 * Switches engines to install GIMP via the **Flatpak bucket** and Code via the **Snap bucket**.
 * Runs system orphan/cache cleanup at the end while deferring individual failures via `--who-cares`.
-* `--dry-run` ensures nothing actually happens, so you can find out what we're doing internally without actually modifying your system
+* `--dry-run` ensures nothing actually happens, so you can find out what we're doing internally without actually modifying your system.
 
 ---
 
@@ -135,7 +136,8 @@ Full system update across all engines (native repos, AUR, Flatpak, Snap):
 puyo -Syu
 # or
 puyo upgrade
-
+# or simply:
+puyo
 ```
 
 Clean package removal:
@@ -144,7 +146,6 @@ Clean package removal:
 puyo -R package
 # or
 puyo remove package
-
 ```
 
 Package search across all active backends:
@@ -153,7 +154,6 @@ Package search across all active backends:
 puyo -s query
 # or
 puyo search query
-
 ```
 
 Direct passthrough (queries, status checks, local binary files):
@@ -181,7 +181,7 @@ puyo snapremove code
 
 ### 3. Atomic Swaps, Cleanup & Granular Mode
 
-Replace package A with package B in a single transaction:
+Replace package A with package B in a single command:
 
 ```bash
 puyo swap old-package new-package
@@ -201,6 +201,8 @@ Run transactions with error-deferral mode enabled:
 
 ```bash
 puyo install pkg1 pkg2 pkg3 --who-cares
+# or
+puyo install pkg1 pkg2 pkg3 -f
 
 ```
 
@@ -214,12 +216,15 @@ puyo -S ./package.rpm
 # or
 puyo install ./package.deb
 puyo install ./package.rpm
+# or 
+puyo ./package.deb
+puyo ./package.rpm
 
 ```
 
 ### 5. Installing Directly from GitHub
 
-`puyo` can clone, build, and package software directly from a GitHub repository, provided a `.puyo` file sits at the repository's root:
+`puyo` can clone, build, and package software directly from a GitHub repository, provided a `.puyo` file sits at the repository's root (which are currently none, get to work devs):
 
 ```bash
 puyo https://github.com/user/project
@@ -230,7 +235,7 @@ puyo https://github.com/user/project
 
 ## The `.puyo` Manifest (For Developers)
 
-If you maintain a project on GitHub and want to make it trivially easy for Arch users to build and track your software, drop a `.puyo` file in your repository root:
+If you maintain a project on GitHub and want to make it trivially easy for Arch users to build and track your software, drop a `.puyo` file like this in your repository root:
 
 ```toml
 [package]
@@ -253,7 +258,7 @@ When `puyo` detects this file during a GitHub build, it synthesizes a clean, sta
 
 `puyo` strictly enforces Arch Linux security best practices:
 
-1. **Never Run as Root:** `puyo` will refuse to execute if invoked directly with `sudo`.
+1. **Never Run As Root:** `puyo` will refuse to execute if invoked directly with `sudo`.
 2. **Isolated Workspaces:** All builds take place in `~/.cache/puyo/builds/` as an unprivileged user.
 3. **Privilege Elevation Handoff:** Root access via `sudo` is requested strictly at the final step when passing compiled binary packages to `pacman -U`.
 
