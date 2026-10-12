@@ -47,7 +47,7 @@ impl PuyoManifest {
             .unwrap_or("Built via puyo");
 
         let package_cmd = if self.build.cmd.contains("cargo") {
-            format!("cargo install --path . --root \"$pkgdir/usr\"")
+            format!("cargo install --path .. --root \"$pkgdir/usr\"")
         } else {
             format!(
                 "install -Dm755 \"{}\" \"$pkgdir/usr/bin/{}\"",

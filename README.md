@@ -1,20 +1,11 @@
 # puyo
-<p align="center">
-<<<<<<< HEAD
-  <img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License">
-  <img src="https://img.shields.io/badge/language-Rust-orange.svg" alt="Rust">
-=======
->>>>>>> 0e7a200 (v1.1.0-beta push)
-
 > **P**recariously **U**nified **Y**ay **O**rchestrator  
 > *A universal meta-wrapper for Arch-based Linux Distros.*
 
-<<<<<<< HEAD
-
-=======
+<p align="center">
   <img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/language-Rust-orange.svg" alt="Rust">
->>>>>>> 0e7a200 (v1.1.0-beta push)
+
 
 `puyo` is a single wrapper designed to solve the fragmentation friction on Arch Linux. While traditional helpers like `yay` or `paru` handle official repositories and the AUR, `puyo` bridges the gap by routing official repos, custom binary mirrors (like `chaotic-aur`), the AUR, local `.deb` and `.rpm` files, and direct GitHub repositories through a single unified pipeline.
 
