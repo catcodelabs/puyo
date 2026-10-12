@@ -6,6 +6,7 @@ mod rpm;
 use anyhow::Result;
 use executor::{enforce_non_root, execute_pipeline, TransactionPipeline};
 use std::env;
+use std::path::Path;
 
 #[derive(PartialEq)]
 enum EngineTarget {
@@ -39,9 +40,8 @@ fn main() -> Result<()> {
 
     while let Some(arg) = iter.next() {
         match arg.as_str() {
-            // Global flags
-            "--who-cares" | "-f" => {
-                pipeline.who_cares = true;
+            "--force" | "-f" => {
+                pipeline.force = true;
             }
             "--dry-run" => {
                 pipeline.dry_run = true;
@@ -114,15 +114,12 @@ fn main() -> Result<()> {
                 current_mode = OperationMode::Remove;
             }
 
-            // Explicit 1-to-1 Swap Command
             "swap" => {
                 let target_remove = iter.next();
                 let target_install = iter.next();
 
                 if let (Some(rem), Some(inst)) = (target_remove, target_install) {
                     pipeline.swaps.push((rem.clone(), inst.clone()));
-                    pipeline.native_remove.push(rem);
-                    pipeline.native_install.push(inst);
                 } else {
                     eprintln!("Error: 'swap' requires exactly two arguments: <old_pkg> <new_pkg>");
                     std::process::exit(1);
@@ -140,13 +137,12 @@ fn main() -> Result<()> {
             // Target Package Names, URLs, Paths, or Native Passthrough Flags
             target => {
                 if target.starts_with('-') {
-                    // Forward unknown flags directly to native yay/pacman (e.g. -Qs, -Si, -U, -Qdt)
                     pipeline.passthrough_args.push(target.to_string());
                 } else {
                     match current_mode {
                         OperationMode::Install => match current_engine {
                             EngineTarget::Native => {
-                                if is_github_target(target) {
+                                if is_manifest_target(target) {
                                     pipeline.github_install.push(target.to_string());
                                 } else {
                                     pipeline.native_install.push(target.to_string());
@@ -172,8 +168,10 @@ fn main() -> Result<()> {
     execute_pipeline(pipeline)
 }
 
-fn is_github_target(target: &str) -> bool {
-    target.starts_with("https://github.com/")
+fn is_manifest_target(target: &str) -> bool {
+    let path = Path::new(target);
+    (path.exists() && path.is_dir())
+        || target.starts_with("https://github.com/")
         || (target.contains('/') && !target.ends_with(".deb") && !target.ends_with(".rpm"))
 }
 
@@ -200,7 +198,7 @@ ENGINE SWITCHES & ONE-SHOTS:
     snapinstall / snapremove    One-shot Snap operation
 
 FLAGS:
-    -f, --who-cares             Defer failures and execute isolated retries on broken targets
+    -f, --force                 Defer failures and execute isolated retries on broken targets
     --dry-run                   Print transaction plan and exit without modifying system
     -h, --help                  Print help information
 "#

@@ -1,0 +1,9 @@
+[package]
+name = "puyo"
+description = "Universal Meta-Wrapper & Transaction Manager for Arch Linux"
+
+[build]
+makedepends = ["cargo", "git"]
+depends = ["pacman", "flatpak", "snapd", "glibc"]
+cmd = "cargo build --release"
+binary = "target/release/puyo"

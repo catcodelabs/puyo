@@ -7,13 +7,14 @@ use std::env;
 use std::io::{self, Write};
 use std::path::Path;
 use std::process::Command;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Default)]
 pub struct TransactionPipeline {
     pub update_native: bool,
     pub update_flatpak: bool,
     pub update_snap: bool,
-    pub who_cares: bool,
+    pub force: bool,
     pub clean: bool,
     pub dry_run: bool,
     pub passthrough_args: Vec<String>,
@@ -26,6 +27,7 @@ pub struct TransactionPipeline {
     pub snap_install: Vec<String>,
     pub snap_remove: Vec<String>,
     pub search_queries: Vec<String>,
+    pub not_found: Vec<(String, String)>,
 }
 
 impl TransactionPipeline {
@@ -37,7 +39,7 @@ impl TransactionPipeline {
 pub fn enforce_non_root() -> Result<()> {
     if let Ok(uid) = std::env::var("SUDO_UID") {
         if uid == "0" || std::env::var("USER").unwrap_or_default() == "root" {
-            bail!("{}", "Error: Do not run puyo with sudo directly. Puyo will request sudo credentials only when invoking pacman.".red().bold());
+            bail!("{}", "ERROR: Do not run puyo with sudo directly. Puyo will request sudo credentials only when invoking pacman.".red().bold());
         }
     }
     Ok(())
@@ -58,9 +60,25 @@ pub fn run_command(cmd: &str, args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+fn format_duration(duration: Duration) -> String {
+    let total_secs = duration.as_secs();
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+    let millis = duration.subsec_millis();
+
+    if hours > 0 {
+        format!("{}h {}m {}.{:03}s", hours, minutes, seconds, millis)
+    } else if minutes > 0 {
+        format!("{}m {}.{:03}s", minutes, seconds, millis)
+    } else {
+        format!("{}.{:03}s", seconds, millis)
+    }
+}
+
 pub fn handle_deb_install(deb_path: &str) -> Result<()> {
     println!(
-        "{} Processing .deb archive via internal puyo engine...",
+        "{} Processing .deb archive",
         "==>".green().bold()
     );
     process_deb_file(Path::new(deb_path))?;
@@ -69,44 +87,51 @@ pub fn handle_deb_install(deb_path: &str) -> Result<()> {
 
 pub fn handle_rpm_install(rpm_path: &str) -> Result<()> {
     println!(
-        "{} Processing .rpm archive via internal puyo engine...",
+        "{} Processing .rpm archive",
         "==>".green().bold()
     );
     process_rpm_file(Path::new(rpm_path))?;
     Ok(())
 }
 
-pub fn handle_github_install(target: &str) -> Result<()> {
-    let build_dir = env::temp_dir().join("puyo_build");
-    if build_dir.exists() {
-        std::fs::remove_dir_all(&build_dir)?;
-    }
-
-    let repo_url = if target.starts_with("http://") || target.starts_with("https://") {
-        target.to_string()
-    } else if Path::new(target).exists() || target.starts_with('/') || target.starts_with("./") {
-        target.to_string()
+pub fn handle_manifest_install(target: &str) -> Result<()> {
+    let target_path = Path::new(target);
+    let build_dir = if target_path.exists() && target_path.is_dir() {
+        std::fs::canonicalize(target_path)?
+    } else if target.starts_with('/') || target.starts_with("./") || target.starts_with("../") {
+        bail!("Local path does not exist or is not a directory: {}", target);
     } else {
-        format!("https://github.com/{}.git", target)
+        // Remote GitHub clone logic here...
+        let temp_dir = env::temp_dir().join("puyo_build");
+        if temp_dir.exists() {
+            std::fs::remove_dir_all(&temp_dir)?;
+        }
+
+        let repo_url = if target.starts_with("http://") || target.starts_with("https://") {
+            target.to_string()
+        } else {
+            format!("https://github.com/{}.git", target)
+        };
+
+        println!(
+            "{} Cloning repository: {}",
+            "==>".blue().bold(),
+            repo_url
+        );
+
+        let status = Command::new("git")
+            .args(["clone", "--depth", "1", &repo_url, temp_dir.to_str().unwrap()])
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GIT_ASKPASS", "echo")
+            .status()?;
+
+        if !status.success() {
+            bail!("Failed to clone repository: {}", repo_url);
+        }
+        temp_dir
     };
 
-    println!(
-        "{} Cloning repository: {}",
-        "==>".blue().bold(),
-        repo_url
-    );
-
-    let status = Command::new("git")
-        .args(["clone", "--depth", "1", &repo_url, build_dir.to_str().unwrap()])
-        .env("GIT_TERMINAL_PROMPT", "0")
-        .env("GIT_ASKPASS", "echo")
-        .status()?;
-
-    if !status.success() {
-        bail!("Failed to clone repository: {}", repo_url);
-    }
-
-    if Path::new(&build_dir).join(".puyo").exists() {
+    if build_dir.join(".puyo").exists() {
         println!(
             "{} Found .puyo manifest! Synthesizing PKGBUILD...",
             "==>".green().bold()
@@ -121,10 +146,7 @@ pub fn handle_github_install(target: &str) -> Result<()> {
         run_command("makepkg", &["-si"])?;
         env::set_current_dir(orig_dir)?;
     } else {
-        println!(
-            "{}",
-            "Warning: No .puyo manifest found in repository root.".yellow()
-        );
+        bail!("Error: No .puyo manifest found in target directory: {:?}", build_dir);
     }
 
     Ok(())
@@ -169,12 +191,101 @@ pub fn execute_pipeline(pipeline: TransactionPipeline) -> Result<()> {
     if is_pipeline_empty(&pipeline) {
         println!(
             "{}",
-            "puyo: No targets provided. Run 'puyo --help' or 'puyo' to update system.".yellow()
+            "puyo: No targets provided. Run 'puyo --help' for help or 'puyo' to update system.".yellow()
         );
         return Ok(());
     }
 
+    // --- Pre-flight Existence Verification Pass ---
+    let mut missing = Vec::new();
+
+    for pkg in &pipeline.native_install {
+        if pkg.ends_with(".deb") || pkg.ends_with(".rpm") {
+            if !Path::new(pkg).exists() {
+                missing.push((pkg.clone(), "Local File".to_string()));
+            }
+        } else {
+            let status = Command::new("yay")
+                .args(["-Si", pkg])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !status {
+                missing.push((pkg.clone(), "Native/AUR".to_string()));
+            }
+        }
+    }
+
+    for (_rem, inst) in &pipeline.swaps {
+        let status = Command::new("yay")
+            .args(["-Si", inst])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        if !status {
+            missing.push((inst.clone(), "Atomic Swap Target".to_string()));
+        }
+    }
+
+    for target in &pipeline.github_install {
+        let path = Path::new(target);
+        if path.exists() && path.is_dir() {
+            if !path.join(".puyo").exists() {
+                missing.push((target.clone(), "Local Manifest Directory (Missing .puyo)".to_string()));
+            }
+        }
+    }
+
+    if is_command_available("flatpak") {
+        for pkg in &pipeline.flatpak_install {
+            let status = Command::new("flatpak")
+                .args(["info", pkg])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !status {
+                missing.push((pkg.clone(), "Flatpak".to_string()));
+            }
+        }
+    }
+
+    if is_command_available("snap") {
+        for pkg in &pipeline.snap_install {
+            let status = Command::new("snap")
+                .args(["info", pkg])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !status {
+                missing.push((pkg.clone(), "Snap".to_string()));
+            }
+        }
+    }
+
+    let mut pipeline = pipeline;
+    pipeline.not_found = missing;
+
     display_preflight_summary(&pipeline);
+
+    if !pipeline.not_found.is_empty() {
+        print!("{} One or more target packages could not be found. Proceed anyway? [y/N]: ", "Warning:".yellow().bold());
+        io::stdout().flush()?;
+        let mut input = String::new();
+        io::stdin().read_line(&mut input)?;
+        let trimmed = input.trim().to_lowercase();
+        if trimmed != "y" && trimmed != "yes" {
+            println!("{}", "Transaction cancelled by user due to missing packages.".yellow());
+            return Ok(());
+        }
+    }
 
     if pipeline.dry_run {
         println!("{}", "[dry-run] Execution plan printed. No changes were made.".cyan().bold());
@@ -186,57 +297,108 @@ pub fn execute_pipeline(pipeline: TransactionPipeline) -> Result<()> {
         return Ok(());
     }
 
+    println!("{} Authenticating sudo session...", "==>".blue().bold());
+    let sudo_status = Command::new("sudo").arg("-v").status()?;
+    if !sudo_status.success() {
+        bail!("Sudo authentication failed.");
+    }
+
+    let pipeline_start = Instant::now();
     let mut failed_steps: Vec<(&'static str, Vec<String>)> = Vec::new();
 
     // 1. System Upgrades Pass
     if pipeline.update_native {
+        let bucket_timer = Instant::now();
         println!("{} Running native system updates...", "==>".green().bold());
-        if let Err(e) = run_command("yay", &["-Syu", "--noconfirm"]) {
-            if !pipeline.who_cares {
+        let res = run_command("yay", &["-Syu", "--noconfirm"]);
+        println!("  {} Completed in {}", "[Native Update]".dimmed(), format_duration(bucket_timer.elapsed()).green());
+
+        if let Err(e) = res {
+            if !pipeline.force {
                 bail!("Native system update failed: {}", e);
             }
-            eprintln!("{}", "Warning: Native update failed. Continuing due to --who-cares...".yellow());
+            eprintln!("{}", "Warning: Native update failed. Continuing due to --force...".yellow());
         }
     }
 
     if pipeline.update_flatpak && is_command_available("flatpak") {
+        let bucket_timer = Instant::now();
         println!("{} Updating Flatpaks...", "==>".green().bold());
         let _ = run_command("flatpak", &["update", "-y"]);
+        println!("  {} Completed in {}", "[Flatpak Update]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
     if pipeline.update_snap && is_command_available("snap") {
+        let bucket_timer = Instant::now();
         println!("{} Updating Snaps...", "==>".green().bold());
         let _ = run_command("sudo", &["snap", "refresh"]);
+        println!("  {} Completed in {}", "[Snap Update]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
     // 2. Native Removal Pass
     if !pipeline.native_remove.is_empty() {
+        let bucket_timer = Instant::now();
         let refs: Vec<&str> = pipeline.native_remove.iter().map(|s| s.as_str()).collect();
         let mut args = vec!["pacman", "-Rns", "--noconfirm"];
         args.extend(refs);
 
         if let Err(e) = run_command("sudo", &args) {
-            if !pipeline.who_cares {
+            if !pipeline.force {
                 bail!("Native removal failed: {}", e);
             }
             failed_steps.push(("Native Remove", pipeline.native_remove.clone()));
         }
+        println!("  {} Completed in {}", "[Native Remove]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
-    // 3. GitHub Manifest Installs Pass
+    // 3. Manifest / GitHub Installs Pass
     if !pipeline.github_install.is_empty() {
+        let bucket_timer = Instant::now();
         for target in &pipeline.github_install {
-            if let Err(e) = handle_github_install(target) {
-                if !pipeline.who_cares {
-                    bail!("GitHub installation failed for target '{}': {}", target, e);
+            if let Err(e) = handle_manifest_install(target) {
+                if !pipeline.force {
+                    bail!("Manifest installation failed for target '{}': {}", target, e);
                 }
                 failed_steps.push(("GitHub Install", vec![target.clone()]));
             }
         }
+        println!("  {} Completed in {}", "[Manifest Install]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
-    // 4. Native Installation Pass
+    // 4. Atomic Swap Pass
+    if !pipeline.swaps.is_empty() {
+        let bucket_timer = Instant::now();
+        for (rem, inst) in &pipeline.swaps {
+            println!("{} Executing atomic swap: {} ➔ {}", "==>".green().bold(), rem.red(), inst.green());
+            
+            let remove_status = Command::new("sudo")
+                .args(["pacman", "-Rdd", "--noconfirm", rem])
+                .status()?;
+
+            if !remove_status.success() {
+                if !pipeline.force {
+                    bail!("Atomic swap failed: could not remove old package '{}'", rem);
+                }
+                eprintln!("{}", format!("Warning: Failed to remove '{}', continuing due to --force...", rem).yellow());
+            }
+
+            let install_status = Command::new("yay")
+                .args(["-S", "--noconfirm", inst])
+                .status()?;
+
+            if !install_status.success() {
+                if !pipeline.force {
+                    bail!("Atomic swap failed: could not install replacement package '{}'", inst);
+                }
+                failed_steps.push(("Atomic Swap Install", vec![inst.clone()]));
+            }
+        }
+        println!("  {} Completed in {}", "[Atomic Swap]".dimmed(), format_duration(bucket_timer.elapsed()).green());
+    }
+
+    // 5. Native Installation Pass
     if !pipeline.native_install.is_empty() {
+        let bucket_timer = Instant::now();
         let mut regular_pkgs = Vec::new();
 
         for pkg in &pipeline.native_install {
@@ -250,66 +412,85 @@ pub fn execute_pipeline(pipeline: TransactionPipeline) -> Result<()> {
         }
 
         if !regular_pkgs.is_empty() {
-            let mut args = vec!["-S", "--noconfirm"];
+            let mut args = vec!["yay", "-S", "--noconfirm", "--answerclean", "All", "--answerdiff", "All"];
             args.extend(regular_pkgs);
+            let cmd_str = args.join(" ");
 
-            if let Err(_) = run_command("yay", &args) {
-                if !pipeline.who_cares {
+            println!(
+                "{} {} {}",
+                "==>".blue().bold(),
+                "Executing:".bold(),
+                cmd_str.dimmed()
+            );
+
+            let status = Command::new("sh")
+                .arg("-c")
+                .arg(&cmd_str)
+                .status()?;
+
+            if !status.success() {
+                if !pipeline.force {
                     bail!("Native installation batch failed.");
                 }
                 failed_steps.push(("Native Install", pipeline.native_install.clone()));
             }
         }
+        println!("  {} Completed in {}", "[Native Install]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
-    // 5. Flatpak Passes
-    if !pipeline.flatpak_remove.is_empty() {
-        let refs: Vec<&str> = pipeline.flatpak_remove.iter().map(|s| s.as_str()).collect();
-        let mut args = vec!["uninstall", "-y"];
-        args.extend(refs);
+    // 6. Flatpak Passes
+    if !pipeline.flatpak_remove.is_empty() || !pipeline.flatpak_install.is_empty() {
+        let bucket_timer = Instant::now();
+        if !pipeline.flatpak_remove.is_empty() {
+            let refs: Vec<&str> = pipeline.flatpak_remove.iter().map(|s| s.as_str()).collect();
+            let mut args = vec!["uninstall", "-y"];
+            args.extend(refs);
 
-        if let Err(_) = run_command("flatpak", &args) {
-            if !pipeline.who_cares {
-                bail!("Flatpak removal batch failed.");
+            if let Err(_) = run_command("flatpak", &args) {
+                if !pipeline.force {
+                    bail!("Flatpak removal batch failed.");
+                }
+                failed_steps.push(("Flatpak Remove", pipeline.flatpak_remove.clone()));
             }
-            failed_steps.push(("Flatpak Remove", pipeline.flatpak_remove.clone()));
         }
-    }
 
-    if !pipeline.flatpak_install.is_empty() {
-        let refs: Vec<&str> = pipeline.flatpak_install.iter().map(|s| s.as_str()).collect();
-        let mut args = vec!["install", "-y"];
-        args.extend(refs);
+        if !pipeline.flatpak_install.is_empty() {
+            let refs: Vec<&str> = pipeline.flatpak_install.iter().map(|s| s.as_str()).collect();
+            let mut args = vec!["install", "-y"];
+            args.extend(refs);
 
-        if let Err(_) = run_command("flatpak", &args) {
-            if !pipeline.who_cares {
-                bail!("Flatpak install batch failed.");
+            if let Err(_) = run_command("flatpak", &args) {
+                if !pipeline.force {
+                    bail!("Flatpak install batch failed.");
+                }
+                failed_steps.push(("Flatpak Install", pipeline.flatpak_install.clone()));
             }
-            failed_steps.push(("Flatpak Install", pipeline.flatpak_install.clone()));
         }
+        println!("  {} Completed in {}", "[Flatpak Pass]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
-    // 6. Snap Passes
-    if !pipeline.snap_remove.is_empty() {
+    // 7. Snap Passes
+    if !pipeline.snap_remove.is_empty() || !pipeline.snap_install.is_empty() {
+        let bucket_timer = Instant::now();
         for target in &pipeline.snap_remove {
             let _ = run_command("sudo", &["snap", "remove", target]);
         }
-    }
-
-    if !pipeline.snap_install.is_empty() {
         for target in &pipeline.snap_install {
             let _ = run_command("sudo", &["snap", "install", target]);
         }
+        println!("  {} Completed in {}", "[Snap Pass]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
-    // 7. Cleanup Pass
+    // 8. Cleanup Pass
     if pipeline.clean {
+        let bucket_timer = Instant::now();
         let _ = execute_cleanup();
+        println!("  {} Completed in {}", "[Clean Pass]".dimmed(), format_duration(bucket_timer.elapsed()).green());
     }
 
-    // Granular Fallback Loop for --who-cares failures
-    if !failed_steps.is_empty() && pipeline.who_cares {
-        println!("\n{}", "==> Phase 2: Retrying failed batch targets individually (--who-cares active)...".yellow().bold());
+    // Granular Fallback Loop for --force failures
+    if !failed_steps.is_empty() && pipeline.force {
+        println!("\n{}", "==> Phase 2: Retrying failed batch targets individually (--force active)...".yellow().bold());
         for (action, targets) in failed_steps {
             for target in targets {
                 match action {
@@ -333,7 +514,11 @@ pub fn execute_pipeline(pipeline: TransactionPipeline) -> Result<()> {
         }
     }
 
-    println!("\n{}", "[puyo] Pipeline execution finished.".green().bold());
+    println!(
+        "\n{} Pipeline execution finished in {}.",
+        "[puyo]".green().bold(),
+        format_duration(pipeline_start.elapsed()).bold()
+    );
     Ok(())
 }
 
@@ -390,7 +575,6 @@ fn display_preflight_summary(p: &TransactionPipeline) {
         }
     }
 
-    // Filter out swap packages from standard remove/install lists for clean reporting
     let swap_removes: Vec<&str> = p.swaps.iter().map(|(r, _)| r.as_str()).collect();
     let swap_installs: Vec<&str> = p.swaps.iter().map(|(_, i)| i.as_str()).collect();
 
@@ -413,7 +597,7 @@ fn display_preflight_summary(p: &TransactionPipeline) {
         println!("  {} {}", "[Native Install]".green(), filtered_native_install.join(", "));
     }
     if !p.github_install.is_empty() {
-        println!("  {} {}", "[GitHub Install]".green().bold(), p.github_install.join(", "));
+        println!("  {} {}", "[Manifest Install]".green().bold(), p.github_install.join(", "));
     }
     if !p.flatpak_remove.is_empty() {
         println!("  {} {}", "[Flatpak Remove]".red(), p.flatpak_remove.join(", "));
@@ -427,11 +611,19 @@ fn display_preflight_summary(p: &TransactionPipeline) {
     if !p.snap_install.is_empty() {
         println!("  {} {}", "[Snap Install]".green(), p.snap_install.join(", "));
     }
+    if !p.not_found.is_empty() {
+        let missing_str: Vec<String> = p
+            .not_found
+            .iter()
+            .map(|(pkg, engine)| format!("{} ({})", pkg, engine))
+            .collect();
+        println!("  {} {}", "[Not Found]".red().bold(), missing_str.join(", "));
+    }
     if p.clean {
         println!("  {} Sweep orphans, pacman cache, and flatpak runtimes", "[Clean]".cyan());
     }
-    if p.who_cares {
-        println!("  {} Granular retry mode enabled (--who-cares)", "[Mode]".bold());
+    if p.force {
+        println!("  {} Granular retry mode enabled (--force)", "[Mode]".bold());
     }
     if p.dry_run {
         println!("  {} DRY RUN MODE (No changes will be applied)", "[Mode]".cyan().bold());
@@ -450,6 +642,7 @@ fn is_pipeline_empty(p: &TransactionPipeline) -> bool {
         && p.flatpak_remove.is_empty()
         && p.snap_install.is_empty()
         && p.snap_remove.is_empty()
+        && p.swaps.is_empty()
 }
 
 fn confirm_prompt(prompt: &str) -> Result<bool> {

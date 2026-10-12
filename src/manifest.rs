@@ -49,7 +49,7 @@ impl PuyoManifest {
         format!(
             r#"# Generated dynamically by puyo
 pkgname="{pkgname}"
-pkgver=1.0.0
+pkgver=1.1.0
 pkgrel=1
 pkgdesc="{desc}"
 arch=('x86_64')
