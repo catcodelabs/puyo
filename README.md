@@ -1,12 +1,20 @@
 # puyo
 <p align="center">
+<<<<<<< HEAD
   <img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License">
   <img src="https://img.shields.io/badge/language-Rust-orange.svg" alt="Rust">
+=======
+>>>>>>> 0e7a200 (v1.1.0-beta push)
 
 > **P**recariously **U**nified **Y**ay **O**rchestrator  
 > *A universal meta-wrapper for Arch-based Linux Distros.*
 
+<<<<<<< HEAD
 
+=======
+  <img src="https://img.shields.io/badge/license-GPLv3-blue.svg" alt="License">
+  <img src="https://img.shields.io/badge/language-Rust-orange.svg" alt="Rust">
+>>>>>>> 0e7a200 (v1.1.0-beta push)
 
 `puyo` is a single wrapper designed to solve the fragmentation friction on Arch Linux. While traditional helpers like `yay` or `paru` handle official repositories and the AUR, `puyo` bridges the gap by routing official repos, custom binary mirrors (like `chaotic-aur`), the AUR, local `.deb` and `.rpm` files, and direct GitHub repositories through a single unified pipeline.
 
@@ -49,7 +57,7 @@ Instead of executing targets sequentially as they appear on the command line, `p
 6. **Flatpak & Snap Installs**: Batches remaining containerized app installations.
 7. **Cleanup Sweep**: Prunes orphans and backend caches if `clean` / `-C` is passed.
 
-If `--force` (`-f`) is active, any bucket that fails will defer its error, allowing remaining buckets to complete before retrying failed individual targets in a granular second phase.
+If `--who-cares` (`-f`) is active, any bucket that fails will defer its error, allowing remaining buckets to complete before retrying failed individual targets in a granular second phase.
 
 ---
 
@@ -64,13 +72,13 @@ puyo swap old-pkg new-pkg \
      https://github.com/catcodelabs/puyo \
      flat install org.gimp.GIMP \
      snap install code \
-     clean --force \
+     clean --who-cares \
      --dry-run
 
 ```
 or if you're feeling crazy:
 ```bash
-puyo swap old-pkg new-pkg native htop ./sample.deb ./sample.rpm https://github.com/catcodelabs/puyo flat install org.gimp.GIMP snap install code clean --force --dry-run
+puyo swap old-pkg new-pkg native htop ./sample.deb ./sample.rpm https://github.com/catcodelabs/puyo flat install org.gimp.GIMP snap install code clean --who-cares --dry-run
 
 ```
 
@@ -81,7 +89,7 @@ This single command demonstrates `puyo`'s bucket sorting in action:
 * Passes `./sample.deb` and `./sample.rpm` through the **Archive Conversion bucket**.
 * Clones and builds the **GitHub bucket** using the `.puyo` manifest.
 * Switches engines to install GIMP via the **Flatpak bucket** and Code via the **Snap bucket**.
-* Runs system orphan/cache cleanup at the end while deferring individual failures via `--force`.
+* Runs system orphan/cache cleanup at the end while deferring individual failures via `--who-cares`.
 * `--dry-run` ensures nothing actually happens, so you can find out what we're doing internally without actually modifying your system.
 
 ---
@@ -132,8 +140,6 @@ Standard installation (Official repos & AUR):
 puyo -S package
 # or
 puyo install package
-# or simply
-puyo package
 
 ```
 
@@ -207,7 +213,7 @@ puyo -C
 Run transactions with error-deferral mode enabled:
 
 ```bash
-puyo install pkg1 pkg2 pkg3 --force
+puyo install pkg1 pkg2 pkg3 --who-cares
 # or
 puyo install pkg1 pkg2 pkg3 -f
 
