@@ -46,11 +46,20 @@ impl PuyoManifest {
             .as_deref()
             .unwrap_or("Built via puyo");
 
+        let package_cmd = if self.build.cmd.contains("cargo") {
+            format!("cargo install --path . --root \"$pkgdir/usr\"")
+        } else {
+            format!(
+                "install -Dm755 \"{}\" \"$pkgdir/usr/bin/{}\"",
+                self.build.binary, self.package.name
+            )
+        };
+
         format!(
             r#"# Generated dynamically by puyo
 pkgname="{pkgname}"
-pkgver=1.1.0
-pkgrel=1
+pkgver=puyo
+pkgrel=9595
 pkgdesc="{desc}"
 arch=('x86_64')
 depends=({depends})
@@ -61,7 +70,7 @@ build() {{
 }}
 
 package() {{
-    install -Dm755 "{binary_path}" "$pkgdir/usr/bin/{pkgname}"
+    {package_cmd}
 }}
 "#,
             pkgname = self.package.name,
@@ -69,7 +78,7 @@ package() {{
             depends = depends_str,
             makedepends = makedepends_str,
             build_cmd = self.build.cmd,
-            binary_path = self.build.binary
+            package_cmd = package_cmd
         )
     }
 
