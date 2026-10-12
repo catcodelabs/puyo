@@ -1,9 +1,10 @@
+# Generated dynamically by puyo
 pkgname="puyo"
-pkgver=1.1.0
-pkgrel=5
+pkgver=1.1.1
+pkgrel=3
 pkgdesc="Universal Meta-Wrapper & Transaction Manager for Arch Linux"
 arch=('x86_64')
-depends=('pacman' 'flatpak' 'snapd' 'glibc')
+depends=('pacman' 'yay' 'flatpak' 'snapd' 'glibc')
 makedepends=('cargo' 'git')
 
 build() {

@@ -102,10 +102,9 @@ If you don't have `yay` installed yet, set it up via the AUR:
 git clone https://aur.archlinux.org/yay.git /tmp/yay
 cd /tmp/yay
 makepkg -si
-
 ```
 
-`snap` and `flatpak` are optional yet highly recommended dependencies. Installation instructions can be found on their respective websites.
+`snap` and `flatpak` are technically optional, but highly recommended dependencies. Installation instructions can be found on their respective websites.
 
 ### Quick Install
 
@@ -160,7 +159,7 @@ puyo -s query
 puyo search query
 ```
 
-Direct passthrough (queries, status checks, local binary files):
+Direct passthrough (queries, status checks, local binary files, etc...):
 
 ```bash
 puyo -Qs package
@@ -182,6 +181,7 @@ puyo flatinstall org.gimp.GIMP
 puyo snapremove code
 
 ```
+An Engine Switch routes all following arguments to the respective engine, requiring another switch to change. A one-shot command only passed the next argument to the specified engine.
 
 ### 3. Atomic Swaps, Cleanup & Granular Mode
 
@@ -204,7 +204,7 @@ puyo -C
 Run transactions with error-deferral mode enabled:
 
 ```bash
-puyo install pkg1 pkg2 pkg3 --who-cares
+puyo install pkg1 pkg2 pkg3 --force
 # or
 puyo install pkg1 pkg2 pkg3 -f
 
@@ -232,6 +232,8 @@ puyo ./package.rpm
 
 ```bash
 puyo https://github.com/user/project
+# or
+puyo user/project
 
 ```
 
@@ -262,9 +264,9 @@ When `puyo` detects this file during a GitHub build, it synthesizes a clean, sta
 
 `puyo` strictly enforces Arch Linux security best practices:
 
-1. **Never Run As Root:** `puyo` will refuse to execute if invoked directly with `sudo`.
-2. **Isolated Workspaces:** All builds take place in `~/.cache/puyo/builds/` as an unprivileged user.
-3. **Privilege Elevation Handoff:** Root access via `sudo` is requested strictly at the final step when passing compiled binary packages to `pacman -U`.
+1. **Never Run As Root:** `puyo` will refuse to execute if invoked directly with `sudo`, ensuring build operations stay safely unprivileged.
+2. **Contextual Workspace Execution:** Local builds happen directly in-place, while remote GitHub repositories and package conversions (`.deb`/`.rpm`) are handled safely inside temporary staging directories.
+3. **Optimized Privilege Handshake:** Sudo authentication is verified via a pre-flight prompt (`sudo -v`) right before executing system transactions, handing off root permissions exclusively when invoking package managers like `pacman`, `yay`, or `snap`.
 
 ---
 

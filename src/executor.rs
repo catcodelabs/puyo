@@ -146,7 +146,7 @@ pub fn handle_manifest_install(target: &str) -> Result<()> {
         run_command("makepkg", &["-si"])?;
         env::set_current_dir(orig_dir)?;
     } else {
-        bail!("Error: No .puyo manifest found in target directory: {:?}", build_dir);
+        bail!("ERROR: No .puyo manifest found in target directory: {:?}", build_dir);
     }
 
     Ok(())
@@ -541,6 +541,8 @@ fn execute_cleanup() -> Result<()> {
     }
 
     println!("Pruning package cache...");
+    // Clean up stale partial download files first to prevent pacman file descriptor errors
+    let _ = run_command("sudo", &["rm", "-f", "/var/cache/pacman/pkg/download-*"]);
     let _ = run_command("yay", &["-Sc", "--noconfirm"]);
 
     if is_command_available("flatpak") {

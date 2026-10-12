@@ -24,8 +24,8 @@ pub fn process_rpm_file(rpm_path: &Path) -> Result<()> {
     let pkgbuild_content = format!(
         r#"# Generated dynamically by puyo from .rpm
 pkgname="{pkgname}"
-pkgver=1.0.0
-pkgrel=1
+pkgver=puyo
+pkgrel=9596
 pkgdesc="Converted from .rpm package via puyo"
 arch=('x86_64')
 depends=('glibc')

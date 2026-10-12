@@ -177,21 +177,22 @@ fn is_manifest_target(target: &str) -> bool {
 
 fn print_help() {
     println!(
-        r#"puyo - Universal Meta-Wrapper & Transaction Manager for Arch Linux
+        r#"puyo - Universal Meta-Wrapper & Transaction Manager for Arch Linux (v1.1.1)
 
 USAGE:
     puyo [MODIFIERS] [VERBS] [PACKAGES...]
 
-COMMANDS & VERBS:
+COMMON COMMANDS & VERBS:
     puyo, -Syu                  Full system update across all engines (yay, flatpak, snap)
     install, -S                 Mark target packages for installation
     remove, -R                  Mark target packages for removal
     swap <pkgA> <pkgB>          Atomic 1-to-1 replacement (removes pkgA, installs pkgB)
     clean, -C                   Sweep orphaned packages and prune backend caches
     search, -s                  Search package databases across enabled backends
+        Note that any standard pacman arguments work.
 
 ENGINE SWITCHES & ONE-SHOTS:
-    native, arch                Route subsequent targets to Yay
+    native, arch                Route subsequent targets to Yay/pacman
     flat, flatpak               Route subsequent targets to Flatpak engine
     snap                        Route subsequent targets to Snap engine
     flatinstall / flatremove    One-shot Flatpak operation

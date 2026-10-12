@@ -13,7 +13,7 @@ pub struct DebMetadata {
 
 pub fn parse_control_file(control_content: &str) -> DebMetadata {
     let mut name = "deb-package".to_string();
-    let mut version = "1.0.0".to_string();
+    let mut version = "puyo".to_string();
     let mut arch = "x86_64".to_string();
     let mut description = "Converted from .deb by puyo".to_string();
 
@@ -100,7 +100,7 @@ pub fn process_deb_file(deb_path: &Path) -> Result<()> {
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_string(),
-            version: "1.0.0".to_string(),
+            version: "puyo".to_string(),
             arch: "x86_64".to_string(),
             description: "Converted from .deb via puyo".to_string(),
         }
@@ -110,7 +110,7 @@ pub fn process_deb_file(deb_path: &Path) -> Result<()> {
         r#"# Generated dynamically by puyo from .deb
 pkgname="{pkgname}"
 pkgver={pkgver}
-pkgrel=1
+pkgrel=9597
 pkgdesc="{pkgdesc}"
 arch=('{arch}')
 depends=('glibc')
