@@ -29,7 +29,7 @@ The cardinal rule of `puyo`: **`pacman` remains the single source of truth.** Ev
 When you pass a list of targets and flags to `puyo`, it parses your input into an internal **Transaction Pipeline**. Targets are automatically categorized into isolated operational "buckets" based on their source type, operational verb, or active engine modifier.
 
 ```
-                                  ┌─ Native/AUR Bucket ──> yay -S
+                                  ┌─ Native/AUR Bucket ───> yay -S
                                   ├─ Local .deb Bucket ───> bsdtar engine + pacman -U
 User Input (puyo) ───────────────>├─ Local .rpm Bucket ───> bsdtar engine + pacman -U
                                   ├─ GitHub Bucket ───────> clone + .puyo manifest build
@@ -44,11 +44,11 @@ Instead of executing targets sequentially as they appear on the command line, `p
 2. **Removals**: Executes native `pacman -Rns`, Flatpak uninstalls, and Snap removals.
 3. **GitHub Builds**: Clones repositories containing `.puyo` manifests and builds native packages.
 4. **Native & Archive Installs**: Batches standard pacman/AUR packages together and converts `.deb`/`.rpm` archives into native `.pkg.tar.zst` packages via `bsdtar` before calling `pacman -U`.
-5. **Atomic Swap**: Attempts to swap one package with another, by first uninstalling the previous one and then installing the new package. Currently breaks as soon as dependencies get involved.
+5. **Atomic Swap**: Attempts to swap one package with another, by first uninstalling the previous one and then installing the new package.
 6. **Flatpak & Snap Installs**: Batches remaining containerized app installations.
 7. **Cleanup Sweep**: Prunes orphans and backend caches if `clean` / `-C` is passed.
 
-If `--who-cares` (`-f`) is active, any bucket that fails will defer its error, allowing remaining buckets to complete before retrying failed individual targets in a granular second phase.
+If `--force` (`-f`) is active, any bucket that fails will defer its error, allowing remaining buckets to complete before retrying failed individual targets in a granular second phase.
 
 ---
 
@@ -63,13 +63,13 @@ puyo swap old-pkg new-pkg \
      https://github.com/catcodelabs/puyo \
      flat install org.gimp.GIMP \
      snap install code \
-     clean --who-cares \
+     clean --force \
      --dry-run
 
 ```
-or if you're feeling crazy:
+or alternatively:
 ```bash
-puyo swap old-pkg new-pkg native htop ./sample.deb ./sample.rpm https://github.com/catcodelabs/puyo flat install org.gimp.GIMP snap install code clean --who-cares --dry-run
+puyo swap old-pkg new-pkg htop ./sample.deb ./sample.rpm catcodelabs/puyo flatinstall org.gimp.GIMP snapinstall code clean -f --dry-run
 
 ```
 
@@ -130,7 +130,8 @@ Standard installation (Official repos & AUR):
 puyo -S package
 # or
 puyo install package
-
+# or simpy
+puyo package
 ```
 
 Full system update across all engines (native repos, AUR, Flatpak, Snap):
@@ -173,7 +174,7 @@ Route commands to specific engines on the fly:
 
 ```bash
 # Engine switches
-puyo flat install flathub org.gimp.GIMP
+puyo flat install org.gimp.GIMP
 puyo snap install code
 
 # One-shot commands
@@ -181,7 +182,7 @@ puyo flatinstall org.gimp.GIMP
 puyo snapremove code
 
 ```
-An Engine Switch routes all following arguments to the respective engine, requiring another switch to change. A one-shot command only passed the next argument to the specified engine.
+An Engine Switch routes all following arguments to the respective engine, requiring another switch to change. A one-shot command passes only the next argument to the specified engine.
 
 ### 3. Atomic Swaps, Cleanup & Granular Mode
 
@@ -207,8 +208,9 @@ Run transactions with error-deferral mode enabled:
 puyo install pkg1 pkg2 pkg3 --force
 # or
 puyo install pkg1 pkg2 pkg3 -f
-
 ```
+If a bucket fails to install, this flag causes `puyo` to retry each transaction in the failed bucket one-by-one to nail the cause of the fail, after completing all other buckets successfully.
+
 
 ### 4. Installing Local `.deb` and `.rpm` Files
 
@@ -228,7 +230,7 @@ puyo ./package.rpm
 
 ### 5. Installing Directly from GitHub
 
-`puyo` can clone, build, and package software directly from a GitHub repository, provided a `.puyo` file sits at the repository's root (which are currently none, get to work devs):
+`puyo` can clone, build, and package software directly from a GitHub repository, provided a `.puyo` file sits at the repository's root (which are currently none aside from puyo itself, get to work developers):
 
 ```bash
 puyo https://github.com/user/project
