@@ -145,7 +145,7 @@ pub fn handle_manifest_install(target: &str) -> Result<()> {
         env::set_current_dir(&build_dir)?;
         
         // Build the package without installing automatically
-        run_command("makepkg", &["-s", "--noconfirm"])?;
+        run_command("makepkg", &["-fs", "--noconfirm"])?;
 
         // Locate the generated package file in the build directory
         let entries = std::fs::read_dir(&build_dir)?;

@@ -45,7 +45,7 @@ impl PuyoManifest {
             .with_context(|| format!("Failed to read manifest at {:?}", manifest_path))?;
 
         let manifest: PuyoManifest =
-            toml::from_str(&content).with_context(|| "Failed to parse .puyo format")?;
+            toml::from_str(&content).with_context(|| "Failed to parse .puyo")?;
 
         Ok(manifest)
     }
