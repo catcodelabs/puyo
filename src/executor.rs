@@ -541,8 +541,6 @@ fn execute_cleanup() -> Result<()> {
     }
 
     println!("Pruning package cache...");
-    // Clean up stale partial download files first to prevent pacman file descriptor errors
-    let _ = run_command("sudo", &["rm", "-f", "/var/cache/pacman/pkg/download-*"]);
     let _ = run_command("yay", &["-Sc", "--noconfirm"]);
 
     if is_command_available("flatpak") {
@@ -555,7 +553,7 @@ fn execute_cleanup() -> Result<()> {
 }
 
 fn display_preflight_summary(p: &TransactionPipeline) {
-    println!("\n{}", "================ [ puyo Execution Plan ] ================".cyan().bold());
+    println!("\n{}", "================ [ puyo Transaction Pipeline ] ================".cyan().bold());
 
     if p.update_native && p.update_flatpak && p.update_snap {
         println!("  {} Update all repositories & backends", "[Update]".yellow());
@@ -593,10 +591,10 @@ fn display_preflight_summary(p: &TransactionPipeline) {
         .collect();
 
     if !filtered_native_remove.is_empty() {
-        println!("  {} {}", "[Native Remove]".red(), filtered_native_remove.join(", "));
+        println!("  {} {}", "[Remove]".red(), filtered_native_remove.join(", "));
     }
     if !filtered_native_install.is_empty() {
-        println!("  {} {}", "[Native Install]".green(), filtered_native_install.join(", "));
+        println!("  {} {}", "[Install]".green(), filtered_native_install.join(", "));
     }
     if !p.github_install.is_empty() {
         println!("  {} {}", "[Manifest Install]".green().bold(), p.github_install.join(", "));
