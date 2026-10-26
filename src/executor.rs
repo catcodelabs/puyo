@@ -591,10 +591,10 @@ fn display_preflight_summary(p: &TransactionPipeline) {
         .collect();
 
     if !filtered_native_remove.is_empty() {
-        println!("  {} {}", "[Remove]".red(), filtered_native_remove.join(", "));
+        println!("  {} {}", "[Native Remove]".red(), filtered_native_remove.join(", "));
     }
     if !filtered_native_install.is_empty() {
-        println!("  {} {}", "[Install]".green(), filtered_native_install.join(", "));
+        println!("  {} {}", "[Native Install]".green(), filtered_native_install.join(", "));
     }
     if !p.github_install.is_empty() {
         println!("  {} {}", "[Manifest Install]".green().bold(), p.github_install.join(", "));
