@@ -31,6 +31,7 @@ fn default_pkgrel() -> u32 {
 pub struct BuildSection {
     pub cmd: String,
     pub binary: String,
+    pub binary_name: Option<String>,
     #[serde(default)]
     pub depends: Vec<String>,
     #[serde(default)]
@@ -64,9 +65,10 @@ impl PuyoManifest {
         let package_cmd = if self.build.cmd.contains("cargo") {
             format!("cargo install --path .. --root \"$pkgdir/usr\"")
         } else {
+            let bin_name = self.build.binary_name.as_deref().unwrap_or(&self.package.name);
             format!(
                 "install -Dm755 \"{}\" \"$pkgdir/usr/bin/{}\"",
-                self.build.binary, self.package.name
+                self.build.binary, bin_name
             )
         };
 

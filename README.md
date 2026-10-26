@@ -236,6 +236,8 @@ puyo ./package.rpm
 puyo https://github.com/user/project
 # or
 puyo user/project
+# or in a local repo/directory
+puyo .
 
 ```
 
@@ -247,16 +249,18 @@ If you maintain a project on GitHub and want to make it trivially easy for Arch 
 
 ```toml
 [package]
-name = "mytool"
-description = "A fast CLI utility"
+name = "example"
+version = "0.2"
+pkgrel = 1
+description = "haha funny tool"
 
 [build]
-makedepends = ["cargo", "git"]
-depends = ["openssl", "glibc"]
-cmd = "cargo build --release"
-binary = "target/release/mytool"
+cmd = "pyinstaller -Fwn example main.py"
+binary = "dist/kdlmanager"
+binary_name = "KdlManager"
+depends = ["kdenlive"]
+makedepends = ["pyinstaller"]
 ```
-
 
 When `puyo` detects this file during a GitHub build, it synthesizes a clean, standard `PKGBUILD` dynamically without requiring you to maintain Arch-specific packaging scripts.
 

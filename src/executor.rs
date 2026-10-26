@@ -143,7 +143,31 @@ pub fn handle_manifest_install(target: &str) -> Result<()> {
 
         let orig_dir = env::current_dir()?;
         env::set_current_dir(&build_dir)?;
-        run_command("makepkg", &["-si"])?;
+        
+        // Build the package without installing automatically
+        run_command("makepkg", &["-s", "--noconfirm"])?;
+
+        // Locate the generated package file in the build directory
+        let entries = std::fs::read_dir(&build_dir)?;
+        let mut pkg_file = None;
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+            if let Some(ext) = path.extension() {
+                if ext == "zst" {
+                    pkg_file = Some(path);
+                    break;
+                }
+            }
+        }
+
+        if let Some(pkg) = pkg_file {
+            println!("{} Installing built package via pacman...", "==>".green().bold());
+            run_command("sudo", &["pacman", "-U", "--noconfirm", pkg.to_str().unwrap()])?;
+        } else {
+            bail!("Could not find generated .pkg.tar.zst package file after makepkg.");
+        }
+
         env::set_current_dir(orig_dir)?;
     } else {
         bail!("ERROR: No .puyo manifest found in target directory: {:?}", build_dir);
