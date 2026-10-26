@@ -50,7 +50,7 @@ fn main() -> Result<()> {
                 pipeline.clean = true;
             }
             "--version" | "-V" => {
-                println!("puyo {}", env!("CARGO_PKG_VERSION"));
+                println!("Running puyo {} {}", env!("CARGO_PKG_VERSION"), "patch 3");
                 return Ok(());
             }
             // Full System Update
