@@ -13,7 +13,7 @@ pub struct DebMetadata {
 
 pub fn parse_control_file(control_content: &str) -> DebMetadata {
     let mut name = "deb-package".to_string();
-    let mut version = "puyo".to_string();
+    let mut version = "0.1.0".to_string();
     let mut arch = "x86_64".to_string();
     let mut description = "Converted from .deb by puyo".to_string();
 
@@ -99,18 +99,20 @@ pub fn process_deb_file(deb_path: &Path) -> Result<()> {
                 .file_stem()
                 .unwrap_or_default()
                 .to_string_lossy()
-                .to_string(),
-            version: "puyo".to_string(),
+                .to_string()
+                .to_lowercase()
+                .replace('_', "-"),
+            version: "0.1.0".to_string(),
             arch: "x86_64".to_string(),
             description: "Converted from .deb via puyo".to_string(),
         }
     };
 
     let pkgbuild_content = format!(
-        r#"# Generated dynamically by puyo from .deb
+        r#"# Generated dynamically by puyo from .deb manifest parsing
 pkgname="{pkgname}"
 pkgver={pkgver}
-pkgrel=9597
+pkgrel=1
 pkgdesc="{pkgdesc}"
 arch=('{arch}')
 depends=('glibc')
@@ -135,7 +137,7 @@ package() {{
 
     let orig_dir = std::env::current_dir()?;
     std::env::set_current_dir(&temp_dir)?;
-    let status = Command::new("makepkg").args(["-si"]).status()?;
+    let status = Command::new("makepkg").args(["-si", "--noconfirm"]).status()?;
     std::env::set_current_dir(orig_dir)?;
 
     if !status.success() {
