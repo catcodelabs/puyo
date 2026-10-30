@@ -17,6 +17,7 @@ enum EngineTarget {
     Snap,
 }
 
+#[derive(PartialEq)]
 enum OperationMode {
     Install,
     Remove,
@@ -59,17 +60,18 @@ fn main() -> Result<()> {
                 let splashes = [
                     "Your friendly neighborhood package manager!",
                     "Smooth pipelines, zero friction.",
-                    "Now bathed in magnificent magenta!",
                     "Unstoppable power, pocket-sized simplicity.",
                     "Ready to wrangle your packages.",
                     "Up to date and looking great.",
                     "Puyo Unifies Your Operations!",
                     "AUR, Flatpak, Snap, and beyond.",
-                    "Brewing fresh binaries since v1.2.0.",
-                    "Ready for action, commander."
+                    "Brewing fresh binaries since v1.2.0!",
+                    "Ready for action, commander.",
+                    "You see that guy? That's my friend, Pac Man.",
+                    "do not run 'rm -fr / --no-preserve-root', it will NOT remove the french language pack.",
+                    "Yes, we are aware pyinstaller is freaking out. We are working on that."
                 ];
 
-// Get true high-entropy randomness using memory address (ASLR), PID, and nanoseconds
                 let stack_var = 0;
                 let memory_entropy = &stack_var as *const i32 as usize;
                 let seed = memory_entropy
@@ -82,7 +84,7 @@ fn main() -> Result<()> {
                     );
                 let splash = splashes[seed % splashes.len()];
 
-                println!("Running puyo v{}", env!("CARGO_PKG_VERSION").white());
+                println!("Running puyo v{}", env!("CARGO_PKG_VERSION"));
                 println!("{}", splash.magenta().bold());
                 return Ok(());
             }
@@ -92,6 +94,22 @@ fn main() -> Result<()> {
                 pipeline.update_native = true;
                 pipeline.update_flatpak = true;
                 pipeline.update_snap = true;
+            }
+
+            // List Installed Packages (-Qs)
+            "list" | "-Qs" => {
+                let query = iter.next().unwrap_or_else(|| "".to_string());
+                pipeline.list_queries.push(query);
+            }
+
+            // Owns File Query (-Qo)
+            "owns" | "-Qo" => {
+                if let Some(file_path) = iter.next() {
+                    pipeline.owns_queries.push(file_path);
+                } else {
+                    eprintln!("Error: 'owns' / '-Qo' requires a file path argument.");
+                    std::process::exit(1);
+                }
             }
 
             // Backend-Specific Updates
@@ -105,7 +123,7 @@ fn main() -> Result<()> {
                 pipeline.update_snap = true;
             }
 
-            // Engine Switches (Contextual modifiers — default mode resets to Install)
+            // Engine Switches 
             "flat" | "flatpak" => {
                 current_engine = EngineTarget::Flatpak;
                 current_mode = OperationMode::Install;
@@ -148,6 +166,7 @@ fn main() -> Result<()> {
                 current_mode = OperationMode::Remove;
             }
 
+            // Atomic Swap
             "swap" => {
                 let target_remove = iter.next();
                 let target_install = iter.next();
@@ -222,8 +241,6 @@ fn initialize_config() -> Result<()> {
 # Commands executed sequentially after a successful full system upgrade (-Syu)
 post_upgrade = [
     "echo 'Puyo system upgrade completed successfully!'",
-    # Example: send a desktop notification disguised as a specific app name
-    # "notify-send -a 'Puyo' 'Upgrade Complete' 'All packages and runtimes are now up to date.'"
 ]
 "#;
 
@@ -235,12 +252,12 @@ post_upgrade = [
 fn is_manifest_target(target: &str) -> bool {
     let path = Path::new(target);
     (path.exists() && path.is_dir())
-        || (target.contains('/') && !target.ends_with(".deb") && !target.ends_with(".rpm")) // match any link or .deb file or .rpm
+        || (target.contains('/') && !target.ends_with(".deb") && !target.ends_with(".rpm"))
 }
 
 fn print_help() {
     println!(
-        r#"puyo - Universal Meta-Wrapper & Transaction Manager for Arch Linux ({version}):
+        r#"puyo - Universal Meta-Wrapper & Transaction Manager for Arch Linux ({version} {relID}):
 
 USAGE:
 puyo [COMMANDS] [PACKAGES] [FLAGS]
@@ -249,23 +266,22 @@ COMMON COMMANDS:
 <no arg>, update, -Syu  Full system update across all engines (yay, flatpak, snap)
 install, -S             Mark target packages for installation
 remove, -R              Mark target packages for removal
-swap <pkgA> <pkgB>      Atomic 1-to-1 replacement (removes pkgA, installs pkgB while ignoring dependencies)
+list, -Qs               List installed packages matching query
+owns, -Qo               Find which package owns a specific file path
+swap <pkgA> <pkgB>      Atomic 1-to-1 replacement
 clean, -C               Sweep orphaned packages and prune backend caches
 search, -s              Search package databases across enabled backends
 init                    Initialize ~/.config/puyo/config.toml default configuration
-Note that any standard pacman arguments should work.
 
 ENGINE SWITCHES & ONE-SHOTS:
 native, arch            Route subsequent commands to Yay/pacman
 flat, flatpak           Route subsequent commands to Flatpak engine
 snap                    Route subsequent commands to Snap engine
-flatinstall/flatremove  One-shot Flatpak operation
-snapinstall/snapremove  One-shot Snap operation
 
 FLAGS:
 -f, --force             Defer failures and execute isolated retries on broken targets
 --dry-run               Print transaction plan and exit without modifying system
 -h, --help              Print help information"#,
-        version = env!("CARGO_PKG_VERSION")
+        version = env!("CARGO_PKG_VERSION"), relID = "magenta"
     );
 }

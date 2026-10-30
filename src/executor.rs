@@ -29,6 +29,8 @@ pub struct TransactionPipeline {
     pub snap_install: Vec<String>,
     pub snap_remove: Vec<String>,
     pub search_queries: Vec<String>,
+    pub list_queries: Vec<String>,
+    pub owns_queries: Vec<String>,
     pub not_found: Vec<(String, String)>,
 }
 
@@ -41,7 +43,7 @@ impl TransactionPipeline {
 pub fn enforce_non_root() -> Result<()> {
     if let Ok(uid) = std::env::var("SUDO_UID") {
         if uid == "0" || std::env::var("USER").unwrap_or_default() == "root" {
-            bail!("{}", "ERROR: Do not run puyo with sudo directly. Puyo will request sudo credentials only when invoking pacman.".red().bold());
+            bail!("{}", "ERROR: Do not run puyo with sudo directly. Puyo will request sudo credentials by itself if required.".red().bold());
         }
     }
     Ok(())
@@ -209,7 +211,22 @@ pub fn execute_pipeline(pipeline: TransactionPipeline) -> Result<()> {
         }
         return Ok(());
     }
+    if !pipeline.list_queries.is_empty() {
+        for query in &pipeline.list_queries {
+            println!("{} Listing installed packages matching: {}", "==>".magenta().bold(), query);
+            let _ = run_command("pacman", &["-Qs", query]);
+        }
+        return Ok(());
+    }
 
+    if !pipeline.owns_queries.is_empty() {
+        for file_path in &pipeline.owns_queries {
+            println!("{} Querying owner of file: {}", "==>".magenta().bold(), file_path);
+            let _ = run_command("pacman", &["-Qo", file_path]);
+        }
+        return Ok(());
+    }
+    
     if is_pipeline_empty(&pipeline) {
         println!(
             "{}",
@@ -414,12 +431,16 @@ pub fn execute_pipeline(pipeline: TransactionPipeline) -> Result<()> {
             bail!("Sudo authentication failed.");
         }
 
-        // --- Sudo Keep-Alive Daemon ---
         let keep_alive_active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
         let ka_flag = keep_alive_active.clone();
         let keep_alive_handle = std::thread::spawn(move || {
             while ka_flag.load(std::sync::atomic::Ordering::Relaxed) {
-                std::thread::sleep(Duration::from_secs(60));
+                for _ in 0..60 {
+                    if !ka_flag.load(std::sync::atomic::Ordering::Relaxed) {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
                 if !ka_flag.load(std::sync::atomic::Ordering::Relaxed) {
                     break;
                 }
@@ -430,14 +451,12 @@ pub fn execute_pipeline(pipeline: TransactionPipeline) -> Result<()> {
                     .status();
             }
         });
-
-        // Ensure we stop the keep-alive thread when the pipeline exits (success or error)
         struct Guard(std::sync::Arc<std::sync::atomic::AtomicBool>, Option<std::thread::JoinHandle<()>>);
         impl Drop for Guard {
             fn drop(&mut self) {
                 self.0.store(false, std::sync::atomic::Ordering::Relaxed);
                 if let Some(handle) = self.take_handle() {
-                        let _ = handle.join();
+                    let _ = handle.join();
                 }
             }
         }

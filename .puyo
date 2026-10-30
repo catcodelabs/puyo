@@ -1,6 +1,6 @@
 [package]
 name = "puyo"
-version = "1.2.0"
+version = "1.2.1"
 pkgrel = 1
 description = "Universal Meta-Wrapper & Transaction Manager for Arch Linux"
 
