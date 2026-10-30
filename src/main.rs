@@ -84,7 +84,7 @@ fn main() -> Result<()> {
                     );
                 let splash = splashes[seed % splashes.len()];
 
-                println!("Running puyo v{}", env!("CARGO_PKG_VERSION"));
+                println!("Running puyo v{} - rubellite-magenta-fuchsia", env!("CARGO_PKG_VERSION"));
                 println!("{}", splash.magenta().bold());
                 return Ok(());
             }
@@ -282,6 +282,6 @@ FLAGS:
 -f, --force             Defer failures and execute isolated retries on broken targets
 --dry-run               Print transaction plan and exit without modifying system
 -h, --help              Print help information"#,
-        version = env!("CARGO_PKG_VERSION"), relID = "magenta"
+        version = env!("CARGO_PKG_VERSION"), relID = "rubellite-magenta-fuchsia"
     );
 }
